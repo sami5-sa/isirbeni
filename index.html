@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bizim Hikayemiz</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+    <style>
+        /* --- STİLLER (RETRO GÖRÜNÜM) --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #f4ecd8;
+            font-family: 'Courier Prime', monospace;
+            color: #4a3b32;
+            overflow-x: hidden;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+        }
+
+        /* Yükleme Ekranı (Spinner) */
+        #loader {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 9999;
+            color: white;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .loader-spin {
+            border: 5px solid #f3f3f3; border-top: 5px solid #8b4513;
+            border-radius: 50%; width: 50px; height: 50px;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Giriş Ekranı */
+        .intro-screen {
+            height: 100vh; width: 100%; position: relative;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: #2c241b; z-index: 10;
+        }
+        .intro-bg {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url('https://resmim.net/cdn/2026/01/13/wyOPaD.jpg');
+            background-size: cover; background-position: center;
+            opacity: 0.6; filter: sepia(0.5) contrast(1.1) blur(1px);
+        }
+        .intro-content {
+            position: relative; z-index: 2; text-align: center;
+            border: 2px solid rgba(255,255,255,0.3); padding: 40px;
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(3px);
+            border-radius: 4px;
+        }
+        .intro-content h1 {
+            font-family: 'Dancing Script', cursive; font-size: 3.5rem; color: #f4ecd8;
+            text-shadow: 2px 2px 4px #000;
+        }
+        .scroll-hint {
+            position: absolute; bottom: 40px; color: #f4ecd8; font-size: 1.5rem;
+            z-index: 2; animation: float 2s infinite ease-in-out; cursor: pointer;
+        }
+
+        /* Ana Alan */
+        .album-container {
+            min-height: 100vh; padding: 40px 20px; position: relative; z-index: 20;
+            background-image: radial-gradient(#6d5c50 1px, transparent 1px);
+            background-size: 20px 20px; background-color: #f4ecd8;
+            box-shadow: 0 -20px 30px rgba(0,0,0,0.2); border-top: 5px solid #8b5a2b;
+        }
+
+        /* Grid ve Kartlar */
+        .retro-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 30px; max-width: 1000px; margin: 0 auto;
+        }
+        .polaroid {
+            background: #fff; padding: 10px 10px 35px 10px;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.2); text-align: center;
+            transform: rotate(-2deg); transition: transform 0.3s;
+            position: relative; margin-top: 20px;
+        }
+        .polaroid:nth-child(even) { transform: rotate(3deg); }
+        .polaroid:hover { transform: scale(1.05) rotate(0deg); z-index: 50; }
+
+        .tape {
+            position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
+            width: 80px; height: 25px; background-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .media-content {
+            width: 100%; height: 150px; object-fit: cover;
+            background: #333; display: block; filter: sepia(0.3);
+        }
+
+        /* Video ve Ses için özel stiller */
+        video.media-content { object-fit: contain; background: #000; }
+        audio { width: 100%; margin-top: 10px; }
+
+        .caption {
+            font-family: 'Dancing Script', cursive; font-size: 1.2rem;
+            color: #444; margin-top: 10px; min-height: 20px;
+        }
+
+        /* Ekleme Butonu */
+        .add-btn {
+            position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px;
+            background: #8b4513; color: #f4ecd8; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 1.5rem; box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+            cursor: pointer; border: 2px solid #d4a056; z-index: 100;
+        }
+
+        /* Modal (Yükleme Formu) */
+        .upload-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 200;
+            justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: #f4ecd8; padding: 30px; border-radius: 10px; width: 90%; max-width: 400px;
+            text-align: center; position: relative;
+        }
+        .close-modal {
+            position: absolute; top: 10px; right: 15px; font-size: 1.5rem; cursor: pointer;
+        }
+        .input-group { margin: 15px 0; text-align: left; }
+        input, select, textarea {
+            width: 100%; padding: 10px; margin-top: 5px;
+            background: #fff; border: 1px solid #8b4513; font-family: 'Courier Prime';
+        }
+        .upload-confirm-btn {
+            background: #8b4513; color: white; padding: 10px 20px; border: none;
+            cursor: pointer; font-size: 1.1rem; margin-top: 10px;
+        }
+
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(10px); } }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <div class="loader-spin"></div>
+        <h3>Anı Yükleniyor...</h3>
+    </div>
+
+    <div class="intro-screen">
+        <div class="intro-bg"></div>
+        <div class="intro-content">
+            <h1>Bizim Hikayemiz</h1>
+            <p>13.01.2024</p>
+            <p>❤</p>
+        </div>
+        <div class="scroll-hint" onclick="document.getElementById('album').scrollIntoView({behavior:'smooth'})">
+            <i class="fa-solid fa-chevron-down"></i>
+        </div>
+    </div>
+
+    <div class="album-container" id="album">
+        <h2 style="text-align:center; font-family:'Dancing Script'; color:#8b4513; margin-bottom:20px;">Anılarımız</h2>
+
+        <div class="retro-grid" id="memory-grid">
+            <div class="polaroid">
+                <div class="tape"></div>
+                <div style="padding: 20px; background: #eee; height: 150px; display:flex; align-items:center; justify-content:center;">
+                    <p>"Seni Çok Seviyorum..."</p>
+                </div>
+                <div class="caption">İlk Notumuz</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="add-btn" onclick="openModal()">
+        <i class="fa-solid fa-plus"></i>
+    </div>
+
+    <div class="upload-modal" id="uploadModal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h3>Yeni Anı Ekle</h3>
+
+            <div class="input-group">
+                <label>Tür Seç:</label>
+                <select id="fileType" onchange="toggleInputs()">
+                    <option value="image">Fotoğraf</option>
+                    <option value="video">Video</option>
+                    <option value="audio">Ses</option>
+                    <option value="note">Sadece Not</option>
+                </select>
+            </div>
+
+            <div class="input-group" id="fileInputGroup">
+                <label>Dosya Seç:</label>
+                <input type="file" id="fileInput">
+            </div>
+
+            <div class="input-group">
+                <label>Altına Not Düş:</label>
+                <input type="text" id="fileCaption" placeholder="Örn: O gün ne güzeldi..." maxlength="30">
+            </div>
+
+            <button class="upload-confirm-btn" onclick="uploadMemory()">Yükle ve Kaydet</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. FIREBASE AYARLARI (BURAYI SEN DOLDURACAKSIN) ---
+        // Firebase Console'dan kopyaladığın 'firebaseConfig' kısmını alttaki süslü parantez içine yapıştır.
+const firebaseConfig = {
+  apiKey: "AIzaSyBQFcQ4d7lY5wPIBV1B0svg5A118xLyk3U",
+  authDomain: "bizim-animiz.firebaseapp.com",
+  projectId: "bizim-animiz",
+  storageBucket: "bizim-animiz.firebasestorage.app",
+  messagingSenderId: "206042152180",
+  appId: "1:206042152180:web:9aaa8f3eba4f081d7572a1"
+};
+
+        // Firebase'i Başlat
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const storage = firebase.storage();
+
+        // --- 2. UYGULAMA MANTIĞI ---
+
+        // Verileri Dinle ve Ekrana Bas (Realtime)
+        const memoryGrid = document.getElementById('memory-grid');
+
+        database.ref('memories').on('child_added', (snapshot) => {
+            const data = snapshot.val();
+            createPolaroid(data);
+        });
+
+        function createPolaroid(data) {
+            const div = document.createElement('div');
+            div.className = 'polaroid';
+
+            let contentHtml = '';
+
+            if (data.type === 'image') {
+                contentHtml = `<img src="${data.url}" class="media-content">`;
+            } else if (data.type === 'video') {
+                contentHtml = `<video src="${data.url}" controls class="media-content"></video>`;
+            } else if (data.type === 'audio') {
+                contentHtml = `<div style="height:100px; display:flex; align-items:center; justify-content:center; background:#eee; color:#8b4513;">
+                                <i class="fa-solid fa-music fa-2x"></i>
+                               </div>
+                               <audio src="${data.url}" controls></audio>`;
+            } else if (data.type === 'note') {
+                contentHtml = `<div style="height:150px; padding:10px; display:flex; align-items:center; justify-content:center; background:#fffbe6; font-family:'Dancing Script'; font-size:1.5rem;">
+                                ${data.note || '...'}
+                               </div>`;
+            }
+
+            div.innerHTML = `
+                <div class="tape"></div>
+                ${contentHtml}
+                <div class="caption">${data.caption}</div>
+            `;
+
+            // En başa ekle (Son yüklenen en üstte)
+            memoryGrid.prepend(div);
+        }
+
+        // --- 3. YÜKLEME İŞLEMLERİ ---
+
+        function uploadMemory() {
+            const type = document.getElementById('fileType').value;
+            const caption = document.getElementById('fileCaption').value;
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (type !== 'note' && !file) {
+                alert("Lütfen bir dosya seç kanka!");
+                return;
+            }
+
+            // Yükleme Başlıyor Animasyonu
+            document.getElementById('uploadModal').style.display = 'none';
+            document.getElementById('loader').style.display = 'flex';
+
+            if (type === 'note') {
+                // Sadece not ise dosya yüklemeye gerek yok
+                saveToDB(type, null, caption, caption); // Note içeriğini caption gibi kaydet
+            } else {
+                // Dosyayı Storage'a Yükle
+                const storageRef = storage.ref('uploads/' + new Date().getTime() + '_' + file.name);
+                const uploadTask = storageRef.put(file);
+
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        // Yükleme yüzdesi istersen buraya eklenir
+                    },
+                    (error) => {
+                        console.error(error);
+                        alert("Yükleme başarısız oldu :( ");
+                        document.getElementById('loader').style.display = 'none';
+                    },
+                    () => {
+                        // Yükleme bitti, Linki al
+                        uploadTask.snapshot.ref.getDownloadURL().then((downloadURL) => {
+                            saveToDB(type, downloadURL, caption);
+                        });
+                    }
+                );
+            }
+        }
+
+        function saveToDB(type, url, caption, noteContent = '') {
+            const newMemoryRef = database.ref('memories').push();
+            newMemoryRef.set({
+                type: type,
+                url: url,
+                caption: caption,
+                note: noteContent,
+                date: new Date().toISOString()
+            }, (error) => {
+                document.getElementById('loader').style.display = 'none';
+                if (error) {
+                    alert('Veritabanı hatası!');
+                } else {
+                    alert('Anı başarıyla eklendi kanka! ❤');
+                    // Formu temizle
+                    document.getElementById('fileInput').value = '';
+                    document.getElementById('fileCaption').value = '';
+                }
+            });
+        }
+
+        // Modal Aç/Kapa
+        function openModal() { document.getElementById('uploadModal').style.display = 'flex'; }
+        function closeModal() { document.getElementById('uploadModal').style.display = 'none'; }
+
+        function toggleInputs() {
+            const type = document.getElementById('fileType').value;
+            if(type === 'note') document.getElementById('fileInputGroup').style.display = 'none';
+            else document.getElementById('fileInputGroup').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
